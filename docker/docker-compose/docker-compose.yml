@@ -1,0 +1,119 @@
+version: "3.7"
+
+services:
+
+  nodejs:
+    build:
+      context: ./docker
+      dockerfile: ./nodejs/Dockerfile
+    restart: always
+    container_name: ${PROJECT}_nodejs
+    env_file:
+      - ./docker/docker-compose/docker_env
+    volumes:
+      - type: bind
+        source: ./project
+        target: /var/www/project
+    tty: true
+    extra_hosts:
+      - ${DOMEN_2_LEVEL}.local:${NGINX_IP}
+    networks:
+      backend:
+        ipv4_address: ${NODEJS_IP}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.next.rule=HostRegexp(`{tmp:^dev.${DOMEN_2_LEVEL}.+}`)"
+      - "traefik.http.services.next.loadbalancer.server.port=3000"
+      - "traefik.http.routers.next.entrypoints=web"
+      - "custom.label=${PROJECT}"
+
+  nginx:
+    build:
+      context: ./docker
+      dockerfile: ./nginx/Dockerfile
+    restart: always
+    container_name: ${PROJECT}_nginx
+    env_file:
+      - ./docker/docker-compose/docker_env
+    environment:
+      DOMEN_2_LEVEL: ${DOMEN_2_LEVEL}
+    depends_on:
+      - nodejs
+    volumes:
+      - type: bind
+        source: ./docker/nginx/default.conf.template
+        target: /etc/nginx/templates/default.conf.template
+      - type: bind
+        source: ./project
+        target: /var/www/project
+      - type: bind
+        source: ./docker/nginx/log
+        target: /var/log/nginx
+    networks:
+      backend:
+        ipv4_address: ${NGINX_IP}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.nginx-http.entrypoints=web"
+      - "traefik.http.routers.nginx-http.rule=HostRegexp(`{tmp:^${DOMEN_2_LEVEL}.+}`)"
+      # Убран редирект c http на https. Как нормально настроим сертификат, можно будет включить его. (сразуже можно будет включить и Secure куки)
+      #- "traefik.http.routers.nginx-http.middlewares=redirect-to-https@docker"
+      - "traefik.http.routers.nginx-https.entrypoints=websecure"
+      - "traefik.http.routers.nginx-https.rule=HostRegexp(`{tmp:^${DOMEN_2_LEVEL}.+}`)"
+      - "traefik.http.routers.nginx-https.tls=true"
+      - "custom.label=${PROJECT}"
+
+  # Login:admin Password:password
+  portainer:
+    image: portainer/portainer:latest
+    container_name: ${PROJECT}_portainer
+    restart: always
+    command: --admin-password '$$2y$$05$$arC5e4UbRPxfR68jaFnAAe1aL7C1U03pqfyQh49/9lB9lqFxLfBqS' -H unix:///var/run/docker.sock
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    networks:
+      backend:
+        ipv4_address: ${PORTAINER_IP}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=HostRegexp(`{tmp:^portainer.+}`)"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "custom.label=${PROJECT}"
+
+  traefik:
+    image: traefik:v2.9
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.file.filename=/traefik/traefik.yaml"
+      - "--providers.docker.constraints=Label(`custom.label`,`${PROJECT}`)"
+    container_name: ${PROJECT}_traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ./docker/traefik
+        target: /traefik
+    networks:
+      backend:
+        ipv4_address: ${TRAEFIK_IP}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=HostRegexp(`{tmp:^traefik.+}`)"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "custom.label=${PROJECT}"
+  
+networks:
+  backend:
+    ipam:
+      driver: default
+      config:
+        - subnet: "${NETWORKS_SUBNET}"
