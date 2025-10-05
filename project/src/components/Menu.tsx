@@ -1,7 +1,8 @@
 'use client'
 
 import {usePathname} from "next/navigation";
-import {IMenuItem, MENU} from "@/components/menu.data";
+import type {IMenuItem} from "@/components/menu.data";
+import {MENU} from "@/components/menu.data";
 import MenuItem from "@/components/MenuItem";
 import {match} from "path-to-regexp";
 

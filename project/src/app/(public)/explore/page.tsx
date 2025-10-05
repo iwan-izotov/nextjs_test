@@ -1,6 +1,12 @@
+import Explore from "@/app/(public)/explore/Explore";
+import {Suspense} from "react";
 
-export default function Explore() {
+export default function ExplorePage() {
     return (
-        <div>Explore</div>
+        <div>
+            <Suspense>
+                <Explore />
+            </Suspense>
+        </div>
     );
 }

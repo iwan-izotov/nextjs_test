@@ -1,6 +1,9 @@
+import ProfileFake from "@/app/(public)/profile-fake/ProfileFake";
 
-export default function ProfileFake() {
+export default function ProfileFakePage() {
     return (
-        <div>Profile Fake</div>
+        <div>
+            <ProfileFake />
+        </div>
     );
 }
